@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"math"
 	"os/exec"
 	"strconv"
 )
@@ -52,57 +53,65 @@ type KLVData struct {
 	SerialNumber string
 }
 
-// Helper to encode a length in BER format (simplified).
-func encodeBERLength(length int) []byte {
-	if length < 128 {
-		return []byte{byte(length)}
-	}
-	// Multi-byte length encoding
-	buf := []byte{}
-	for length > 0 {
-		buf = append([]byte{byte(length & 0xFF)}, buf...)
-		length >>= 8
-	}
-	return append([]byte{byte(len(buf) | 0x80)}, buf...)
+// ---------- Encoder Helpers ----------
+func EncodeUint64(tag byte, value uint64) []byte {
+	buf := make([]byte, 10)
+	buf[0] = tag
+	buf[1] = 8
+	binary.BigEndian.PutUint64(buf[2:], value)
+	return buf
 }
 
-func BuildKLVDataBuffer(data KLVData) []byte {
-	var buffer bytes.Buffer
+func EncodeFloat64(tag byte, value float64) []byte {
+	buf := make([]byte, 10)
+	buf[0] = tag
+	buf[1] = 8
+	binary.BigEndian.PutUint64(buf[2:], math.Float64bits(value))
+	return buf
+}
 
-	// Example keys
-	const (
-		KEY_START_TIME    = 0x01
-		KEY_END_TIME      = 0x02
-		KEY_LENGTH        = 0x03
-		KEY_SERIAL_NUMBER = 0x04
-	)
+func EncodeString(tag byte, value string) []byte {
+	data := []byte(value)
+	buf := make([]byte, 2+len(data))
+	buf[0] = tag
+	buf[1] = byte(len(data))
+	copy(buf[2:], data)
+	return buf
+}
 
-	// Start Time
-	buffer.WriteByte(KEY_START_TIME) // Key
-	startTimeBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(startTimeBytes, data.StartTime) // Value
-	buffer.Write(encodeBERLength(len(startTimeBytes)))         // Length
-	buffer.Write(startTimeBytes)                               // Value
+// Wrap in Local Set (i.e., 0x06 for VMTI)
+func WrapInLocalSet(setTag byte, inner []byte) []byte {
+	buf := make([]byte, 2+len(inner))
+	buf[0] = setTag
+	buf[1] = byte(len(inner))
+	copy(buf[2:], inner)
+	return buf
+}
 
-	// End Time
-	buffer.WriteByte(KEY_END_TIME) // Key
-	endTimeBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(endTimeBytes, data.EndTime) // Value
-	buffer.Write(encodeBERLength(len(endTimeBytes)))       // Length
-	buffer.Write(endTimeBytes)                             // Value
+// Create BER length field
+func EncodeBERLength(length int) []byte {
+	if length < 0x80 {
+		return []byte{byte(length)}
+	}
+	// Long-form BER (e.g. 0x81 xx)
+	result := []byte{}
+	tmp := length
+	for tmp > 0 {
+		result = append([]byte{byte(tmp & 0xFF)}, result...)
+		tmp >>= 8
+	}
+	result = append([]byte{0x80 | byte(len(result))}, result...)
+	return result
+}
 
-	// Length
-	buffer.WriteByte(KEY_LENGTH) // Key
-	lengthBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(lengthBytes, uint32(data.Duration)) // Value
-	buffer.Write(encodeBERLength(len(lengthBytes)))      // Length
-	buffer.Write(lengthBytes)                            // Value
-
-	// Serial Number
-	buffer.WriteByte(KEY_SERIAL_NUMBER)             // Key
-	serialBytes := []byte(data.SerialNumber)        // Value
-	buffer.Write(encodeBERLength(len(serialBytes))) // Length
-	buffer.Write(serialBytes)                       // Value
-
-	return buffer.Bytes()
+// Wrap in full KLV (Universal Key + BER Length + Local Set)
+func WrapInKLV(klvData []byte) []byte {
+	universalKey := []byte{
+		0x06, 0x0E, 0x2B, 0x34,
+		0x02, 0x0B, 0x01, 0x01,
+		0x0E, 0x01, 0x03, 0x01,
+		0x01, 0x00, 0x00, 0x00, // MISB 0601 UID
+	}
+	berLength := EncodeBERLength(len(klvData))
+	return append(append(universalKey, berLength...), klvData...)
 }

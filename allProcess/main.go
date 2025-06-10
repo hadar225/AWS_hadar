@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+
 	//"os"
 	//"os/exec"
-	betterklv "github.com/moran/betterklv"
+	betterklv "github.com/hadar225/AWS_hadar/betterklv"
 )
 
 func main() {
@@ -32,25 +34,37 @@ func main() {
 	endTime := startTime + uint64(duration) // endTime = startTime + duration in seconds
 	serialNumber := "ABC123456"
 
-	dataToEncode := KLVData{
-		StartTime:    startTime,
-		EndTime:      endTime,
-		Duration:     duration,
-		SerialNumber: serialNumber,
+	//levelB.2 - buildKLVDataBuffer
+	// Field Encoding
+	klvPayload := []byte{}
+	klvPayload = append(klvPayload, EncodeUint64(72, startTime)...)
+	klvPayload = append(klvPayload, EncodeUint64(2, endTime)...)
+	klvPayload = append(klvPayload, EncodeString(12, strconv.FormatFloat(duration, 'f', 2, 64))...)
+	klvPayload = append(klvPayload, EncodeString(10, serialNumber)...)
+
+	// Wrap as full KLV
+	klvBuffer := WrapInKLV(klvPayload)
+
+	fmt.Println("Encoded KLV buffer:", klvBuffer)
+
+	// Parse
+	res, err := betterklv.HandleKLVBuffer(klvBuffer)
+	if err != nil {
+		fmt.Println("Error parsing KLV:", err)
+		return
 	}
-	//levelB.2 - buildKLVDataBuffer - completed
-	klvBuffer := BuildKLVDataBuffer(dataToEncode)
-	fmt.Printf("KLV Buffer: %v\n", klvBuffer)
-	//levelB.3 - use HandleKLVBuffer
-	res, _ := betterklv.HandleKLVBuffer(klvBuffer)
-	for k, v := range res {
-		if k == betterklv.VMTI_DATA_SET {
-			fmt.Println(k, ":")
-			for k2, v2 := range v.(map[string]interface{}) {
-				fmt.Println(" ", k2, ":", v2)
-			}
-		} else {
-			fmt.Println(k, ":", v)
-		}
-	}
+
+	fmt.Println("result:", res)
+
+	// Print result
+	// for k, v := range res {
+	// 	if k == betterklv.VMTI_DATA_SET {
+	// 		fmt.Println(k, ":")
+	// 		for k2, v2 := range v.(map[string]interface{}) {
+	// 			fmt.Println(" ", k2, ":", v2)
+	// 		}
+	// 	} else {
+	// 		fmt.Println(k, ":", v)
+	// 	}
+	// }
 }
