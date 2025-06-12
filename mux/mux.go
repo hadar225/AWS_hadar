@@ -1,11 +1,9 @@
 package mux
 
 /*
-#cgo CFLAGS: -w -I/home/tomer/mpeg2ts/Mpeg2-TS
-#cgo LDFLAGS: -L . -lmux -lm
-
-#include <Mpeg2-TS.h>
-
+#cgo CFLAGS: -I../Mpeg2-TS        
+#cgo LDFLAGS: -L. -lmux -lm
+#include "Mpeg2-TS.h"
 */
 import "C"
 import (

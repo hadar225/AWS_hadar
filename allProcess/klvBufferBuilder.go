@@ -4,10 +4,28 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os/exec"
 	"strconv"
 )
+
+func EncodePTS(pts uint64) []byte {
+	if pts > (1 << 33) {
+		pts %= (1 << 33) // Wrap around at 33 bits
+	}
+
+	b := make([]byte, 5)
+
+	// Set the '0010' prefix for PTS (PTS_DTS_flags = '10')
+	b[0] = byte(0x20 | (((pts >> 30) & 0x07) << 1) | 0x01)       
+	b[1] = byte((pts >> 22) & 0xFF)
+	b[2] = byte((((pts >> 15) & 0x7F) << 1) | 0x01)              
+	b[3] = byte((pts >> 7) & 0xFF)
+	b[4] = byte(((pts & 0x7F) << 1) | 0x01)                      
+
+	return b
+}
 
 type FFProbeFormat struct {
 	Duration string `json:"duration"`
@@ -18,6 +36,7 @@ type FFProbeOutput struct {
 }
 
 func GetVideoDuration(path string) (float64, error) {
+	fmt.Println("Running ffprobe on file:", path)
 	cmd := exec.Command("ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",
@@ -26,11 +45,14 @@ func GetVideoDuration(path string) (float64, error) {
 	)
 
 	var out bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
-		return 0, err
-	}
+	err := cmd.Run()
+    if err != nil {
+        return 0, fmt.Errorf("ffprobe failed: %v\nstderr: %s", err, stderr.String())
+    }
 
 	var ffprobeData FFProbeOutput
 	if err := json.Unmarshal(out.Bytes(), &ffprobeData); err != nil {

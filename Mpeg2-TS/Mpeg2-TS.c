@@ -357,9 +357,9 @@ int build_metadata_pes(BYTE *packet_in, unsigned __int16 size, BYTE *packet_out,
 				//sequance_number++;
 
 				//if (size > pos + len)
-					//au_cell->cell_fragment_indication = 0;
+				//au_cell->cell_fragment_indication = 0;
 				//else
-					//au_cell->cell_fragment_indication = 1;
+				//au_cell->cell_fragment_indication = 1;
 
 				//au_cell->random_access_indicator = 0;
 				//au_cell->reserved = 0xF;
@@ -1048,29 +1048,29 @@ void read_file(char *name, char *buf, int length)
 
 // int main()
 // {
-// 	// char pat[188];
-// 	// char pmt[188];
+// 	char pat[188];
+// 	char pmt[188];
 
-// 	// read_file("fake_pat", pat, 188);
-// 	// read_file("empty_pmt", pmt, 188);
+// 	read_file("fake_pat", pat, 188);
+// 	read_file("empty_pmt", pmt, 188);
 
-// 	// enable_descriptors();
-// 	// set_metadatas_to_send(0,1,0,0);
+// 	enable_descriptors();
+// 	set_metadatas_to_send(0,1,0,0);
 
-// 	// handle_psi(pat, 0, 0);
-// 	// handle_psi(pmt, 0, 0);
+// 	handle_psi(pat, 0, 0);
+// 	handle_psi(pmt, 0, 0);
 
 // 	char klv[1346];
 // 	char muxed[2000];
 // 	read_file("klv.bin", klv, 1346);
 // 	int length = 1346;
 // 	int offset = 0;
-// 	// int build_metadata_pes(BYTE* packet_in, unsigned __int16 size, BYTE* packet_out, BYTE pid, BYTE service_id, int *general_offset, BYTE* user_pts)
+// 	int build_metadata_pes(BYTE* packet_in, unsigned __int16 size, BYTE* packet_out, BYTE pid, BYTE service_id, int *general_offset, BYTE* user_pts)
 // 	int tses = build_metadata_pes(klv, 1346, muxed, 0x28, 2, &offset, NULL);
 // 	tses += build_metadata_pes(klv, 1346, muxed + tses*188, 0x28, 2, &offset, NULL);
-// 	//FILE* f = fopen("muxed.bin", "wb");
-// 	//fwrtie()
-// 	//mux.BuildMetadataPes(klvBytes[pos:], len(klvBytes), muxedKlv[size:], uint8(0xFD), 2, &pos, LastPTSHeader) // LastPTSHeader
+// 	FILE* f = fopen("muxed.bin", "wb");
+// 	fwrtie()
+// 	mux.BuildMetadataPes(klvBytes[pos:], len(klvBytes), muxedKlv[size:], uint8(0xFD), 2, &pos, LastPTSHeader) // LastPTSHeader
 
 // 	return 0;
 // }
@@ -1086,12 +1086,12 @@ void read_file(char *name, char *buf, int length)
 // 		pos+=2;
 // 	}
 
-// 	// printf("0x");
+// 	printf("0x");
 
-// 	// for(size_t count=0;count<sizeof pes/sizeof *pes;count++){
-// 	// 	printf("%02x",pes[count]);
-// 	// }
-// 	// printf("\n");
+// 	for(size_t count=0;count<sizeof pes/sizeof *pes;count++){
+// 		printf("%02x",pes[count]);
+// 	}
+// 	printf("\n");
 
 // 	handle_psi(pes, 0, 0);
 
