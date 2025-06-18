@@ -110,22 +110,6 @@ func WrapInLocalSet(setTag byte, inner []byte) []byte {
 	return buf
 }
 
-// Create BER length field
-func EncodeBERLength(length int) []byte {
-	if length < 0x80 {
-		return []byte{byte(length)}
-	}
-	// Long-form BER (e.g. 0x81 xx)
-	result := []byte{}
-	tmp := length
-	for tmp > 0 {
-		result = append([]byte{byte(tmp & 0xFF)}, result...)
-		tmp >>= 8
-	}
-	result = append([]byte{0x80 | byte(len(result))}, result...)
-	return result
-}
-
 // Wrap in full KLV (Universal Key + BER Length + Local Set)
 func WrapInKLV(klvData []byte) []byte {
 	universalKey := []byte{
@@ -137,3 +121,36 @@ func WrapInKLV(klvData []byte) []byte {
 	berLength := EncodeBERLength(len(klvData))
 	return append(append(universalKey, berLength...), klvData...)
 }
+
+func EncodeBERLength(length int) []byte {
+	if length < 0x80 {
+		return []byte{byte(length)}
+	}
+	// תומך ב-length קטן, אפשר להרחיב לגדולים יותר אם צריך
+	return []byte{0x81, byte(length)}
+}
+
+
+func EncodeLocalSetField(tag byte, value []byte) []byte {
+	length := len(value)
+	buf := []byte{tag}
+	buf = append(buf, EncodeBERLength(length)...)
+	buf = append(buf, value...)
+	return buf
+}
+
+func EncodeUint64Value(val uint64) []byte {
+	b := make([]byte, 8)
+	for i := uint(0); i < 8; i++ {
+		b[7-i] = byte(val >> (i * 8))
+	}
+	return b
+}
+
+var UniversalKey0601 = []byte{
+	0x06, 0x0E, 0x2B, 0x34,
+	0x02, 0x0B, 0x01, 0x01,
+	0x0E, 0x01, 0x03, 0x01,
+	0x01, 0x00, 0x00, 0x00,
+}
+

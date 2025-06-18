@@ -24,7 +24,7 @@ import (
 
 // HandlePSI func
 func HandlePSI(packet []byte, is_partial int, is_dish2 int) int {
-	return (int)(C.handle_psi((*C.char)(unsafe.Pointer(&packet[0])), (C.int)(is_partial), (C.int)(is_dish2)))
+	return (int)(C.handle_psi((*C.uchar)(unsafe.Pointer(&packet[0])), (C.int)(is_partial), (C.int)(is_dish2)))
 }
 
 // EnableDescriptors func
@@ -39,9 +39,9 @@ func SetMetadatasToSend(stat int, dyn int, anch int, ent int) {
 
 func BuildMetadataPes(packet_in []byte, size int, packet_out []byte, pid uint8, service_id int, general_offset *int, user_pts []byte) int {
 	if user_pts != nil {
-		return int(C.build_metadata_pes((*C.char)(unsafe.Pointer(&packet_in[0])), (C.ushort)(uint16(size)), (*C.char)(unsafe.Pointer(&packet_out[0])), (C.char)(pid), (C.char)(service_id), (*C.int)(unsafe.Pointer(general_offset)), (*C.char)(unsafe.Pointer(&user_pts[0]))))
+		return int(C.build_metadata_pes((*C.uchar)(unsafe.Pointer(&packet_in[0])), (C.ushort)(uint16(size)), (*C.uchar)(unsafe.Pointer(&packet_out[0])), (C.uchar)(pid), (C.uchar)(service_id), (*C.int)(unsafe.Pointer(general_offset)), (*C.uchar)(unsafe.Pointer(&user_pts[0]))))
 	}
-	return int(C.build_metadata_pes((*C.char)(unsafe.Pointer(&packet_in[0])), (C.ushort)(uint16(size)), (*C.char)(unsafe.Pointer(&packet_out[0])), (C.char)(pid), (C.char)(service_id), (*C.int)(unsafe.Pointer(general_offset)), (*C.char)(unsafe.Pointer(uintptr(0)))))
+	return int(C.build_metadata_pes((*C.uchar)(unsafe.Pointer(&packet_in[0])), (C.ushort)(uint16(size)), (*C.uchar)(unsafe.Pointer(&packet_out[0])), (C.uchar)(pid), (C.uchar)(service_id), (*C.int)(unsafe.Pointer(general_offset)), (*C.uchar)(unsafe.Pointer(uintptr(0)))))
 }
 
 // HandleTS func
