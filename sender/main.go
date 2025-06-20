@@ -32,26 +32,6 @@ func main() {
 	// fmt.Printf("time take is: %s\n", elapsed)
 	// fmt.Printf("Conversion complete! Output file: %s\n", outputFile)
 
-	//levelB.2 - buildKLVDataBuffer - completed, res is the decoded result of the values
-	// res, err := betterklv.HandleKLVBuffer(klvPacket)
-	// if err != nil {
-	// 	fmt.Println("Error parsing KLV:", err)
-	// 	return
-	// } else {
-	// 	fmt.Println("Decoded KLV buffer:", res)
-	// }
-	// for k, v := range res {
-	// 	if k == betterklv.VMTI_DATA_SET {
-	// 		fmt.Println(k, ":")
-	// 		for k2, v2 := range v.(map[string]interface{}) {
-	// 			fmt.Println(" ", k2, ":", v2)
-	// 		}
-	// 	} else {
-	// 		fmt.Println(k, ":", v)
-	// 	}
-	// }
-
-	//levelC - broadcats the .ts video and muxedklv
 	udpAddr := "235.235.235.235:1234"
 	conn, err := net.Dial("udp", udpAddr)
 	if err != nil {
@@ -72,22 +52,31 @@ func main() {
 	mux.EnableDescriptors()
 	mux.SetMetadatasToSend(0, 1, 0, 0)
 
-	var tsPacketCount int = 0
-	var pos int = 0
-	muxedKlv := make([]byte, 188)
+	var tsPacketCount int
+	var pos int
+
+	const MaxMuxOutPackets = 10
+	const tsSize = 188
+	muxedKlv := make([]byte, tsSize*MaxMuxOutPackets)
+
 	time.Sleep(20 * time.Second)
+
+	// klvPacket := []byte{
+	// 	6, 14, 43, 52, 2, 11, 1, 1, 14, 1, 3, 1, 1, 0, 0, 0, 129, 225, 2, 8, 0, 6, 17, 252, 199, 234, 0, 113, 4, 5, 49, 55, 52, 53, 52, 14, 4, 24, 123, 183, 68, 13, 4, 44, 201, 206, 182, 15, 2, 29, 128, 3, 2, 49, 53, 23, 4, 44, 205, 127, 157, 24, 4, 24, 123, 75, 34, 25, 2, 12, 43, 82, 4, 44, 205, 171, 219, 83, 4, 24, 123, 48, 142, 84, 4, 44, 205, 184, 151, 85, 4, 24, 123, 91, 53, 86, 4, 44, 205, 86, 222, 87, 4, 24, 123, 101, 142, 88, 4, 44, 205, 75, 105, 89, 4, 24, 123, 59, 137, 18, 4, 4, 212, 92, 229, 19, 4, 0, 0, 0, 0, 20, 4, 0, 0, 0, 0, 16, 2, 0, 0, 17, 2, 0, 0, 10, 12, 84, 104, 117, 110, 100, 101, 114, 83, 116, 111, 114, 109, 11, 5, 72, 121, 100, 114, 97, 74, 58, 7, 3, 0, 150, 27, 8, 3, 0, 1, 224, 9, 3, 0, 1, 224, 101, 27, 26, 129, 235, 62, 19, 4, 0, 0, 0, 149, 20, 4, 0, 0, 1, 82, 102, 9, 2, 7, 85, 78, 75, 78, 79, 87, 78, 3, 12, 84, 104, 117, 110, 100, 101, 114, 83, 116, 111, 114, 109, 73, 11, 11, 9, 1, 1, 65, 2, 4, 0, 0, 0, 1, 1, 2, 223, 125,
+	// }
+
 	klvPacket := BuildDynamicKLV()
+
 	fmt.Println("klvPacket:", klvPacket)
 	res, err := betterklv.HandleKLVBuffer(klvPacket)
 	if err != nil {
 		fmt.Println("Error parsing KLV:", err)
 		return
-	} else {
-		fmt.Println("Decoded KLV buffer:", res)
 	}
+	fmt.Println("Decoded KLV buffer:", res)
 	fmt.Printf("KLV packet length: %d bytes\n", len(klvPacket))
+
 	for {
-		// Read one TS packet from file
 		n, err := io.ReadFull(tsFile, packetBuf)
 		if err == io.EOF {
 			fmt.Println("End of TS file reached. Stopping.")
@@ -102,7 +91,6 @@ func main() {
 		}
 
 		mux.HandlePSI(packetBuf, 0, 0)
-		// Send TS packet over UDP
 		_, err = conn.Write(packetBuf)
 		if err != nil {
 			fmt.Println("Failed to send TS packet:", err)
@@ -123,34 +111,38 @@ func main() {
 	}
 }
 
-// func BuildDynamicKLV() []byte {
-// 	duration, _ := GetVideoDuration("sender/output.ts")
+func SendKLV(conn net.Conn, klvPacket []byte, pos *int, muxedKlv []byte, pid uint8, serviceID int) error {
+	const tsSize = 188
 
-// 	startTime := uint64(time.Now().Unix())  // e.g. 2021-05-03 00:00:00 UTC
-// 	endTime := startTime + uint64(duration) // endTime = startTime + duration in seconds
-// 	serialNumber := "ABC123456"
+	ok := mux.BuildMetadataPes(klvPacket, len(klvPacket), muxedKlv, pid, serviceID, pos, nil)
+	if ok <= 0 {
+		fmt.Printf("❌ BuildMetadataPes failed at once, pos: %d, size: %d\n", *pos, len(klvPacket))
+		return fmt.Errorf("BuildMetadataPes failed")
+	}
 
-// 	var localSetPayload []byte
+	// כעת שולחים את כל ה-TS packets שהפונקציה יצרה במקביל, לפי מספר חבילות:
+	packetsCount := (*pos + tsSize - 1) / tsSize // כמות חבילות ts שהתקבלו
 
-// 	localSetPayload = append(localSetPayload, EncodeLocalSetField(72, EncodeUint64Value(startTime))...)
-// 	localSetPayload = append(localSetPayload, EncodeLocalSetField(2, EncodeUint64Value(endTime))...)
-// 	localSetPayload = append(localSetPayload, EncodeLocalSetField(12, []byte(strconv.FormatFloat(duration, 'f', 2, 64)))...)
-// 	localSetPayload = append(localSetPayload, EncodeLocalSetField(10, []byte(serialNumber))...)
+	for i := 0; i < packetsCount; i++ {
+		start := i * tsSize
+		end := start + tsSize
+		if end > len(muxedKlv) {
+			end = len(muxedKlv)
+		}
+		_, err := conn.Write(muxedKlv[start:end])
+		if err != nil {
+			return fmt.Errorf("failed to send TS packet: %w", err)
+		}
+		fmt.Printf("📤 Sent TS packet %d\n", i)
+		time.Sleep(5 * time.Millisecond)
+	}
 
-// 	// Build full KLV packet: UK + BER length + payload
-// 	UK := UniversalKey0601
-// 	lengthBytes := EncodeBERLength(len(localSetPayload))
-
-// 	klvPacket := []byte{}
-// 	klvPacket = append(klvPacket, UK...)
-// 	klvPacket = append(klvPacket, lengthBytes...)
-// 	klvPacket = append(klvPacket, localSetPayload...)
-
-// 	return klvPacket
-// }
+	fmt.Println("✅ Finished sending full KLV payload at once.")
+	return nil
+}
 
 func BuildDynamicKLV() []byte {
-	// שלב 1: Universal Key תקני
+	// Universal Key תקני - STANAG 4609 MISB 0601
 	universalKey := []byte{
 		0x06, 0x0E, 0x2B, 0x34,
 		0x02, 0x0B, 0x01, 0x01,
@@ -158,54 +150,44 @@ func BuildDynamicKLV() []byte {
 		0x01, 0x00, 0x00, 0x00,
 	}
 
-	// שלב 2: ערכים דינמיים
 	startTime := uint64(time.Now().Unix())
-	endTime := startTime + 60 // לדוגמה: וידאו של דקה
+	endTime := startTime + 60 // דקה
 	duration := float64(60.0)
-	serialNumber := "ABC123456"
+	serialNumber := "ABC12345678901234567890" // ארוך יותר
 
-	// שלב 3: בניית ה־Local Set (Tag + Length + Value)
+	// נבנה local set מורחב עם שדות נוספים
 	var localSet []byte
-	localSet = append(localSet, EncodeLocalSetField(0x48, EncodeUint64Value(startTime))...) // Tag 72: Start Time
-	localSet = append(localSet, EncodeLocalSetField(0x02, EncodeUint64Value(endTime))...)   // Tag 2: End Time
-	localSet = append(localSet, EncodeLocalSetField(0x0C, []byte(strconv.FormatFloat(duration, 'f', 2, 64)))...) // Tag 12: Duration as ASCII
-	localSet = append(localSet, EncodeLocalSetField(0x0A, []byte(serialNumber))...)         // Tag 10: Serial Number
 
-	// שלב 4: Encode BER Length
+	// פונקציה עזר: Tag + Length + Value
+	encodeField := func(tag byte, value []byte) []byte {
+		encoded := []byte{tag}
+		// length קצר (בהנחה שעד 127, אחרת צריך BER מורכב)
+		encoded = append(encoded, byte(len(value)))
+		encoded = append(encoded, value...)
+		return encoded
+	}
+
+	// הוספת שדות
+	localSet = append(localSet, encodeField(0x48, EncodeUint64Value(startTime))...)                      // Start Time
+	localSet = append(localSet, encodeField(0x02, EncodeUint64Value(endTime))...)                        // End Time
+	localSet = append(localSet, encodeField(0x0C, []byte(strconv.FormatFloat(duration, 'f', 2, 64)))...) // Duration ASCII
+	localSet = append(localSet, encodeField(0x0A, []byte(serialNumber))...)                              // Serial Number
+
+	// נוסיף הרבה שדות מזויפים לחזרתיות וגדול
+	for i := 0; i < 2; i++ {
+		tag := byte(0x50 + i%10) // tags מסתובבים בין 0x50 ל-0x59
+		val := []byte(fmt.Sprintf("FieldValue-%02d-%s", i, serialNumber))
+		localSet = append(localSet, encodeField(tag, val)...)
+	}
+
+	// Encode BER Length של כל ה־localSet
 	lengthBytes := EncodeBERLength(len(localSet))
 
-	// שלב 5: חיבור מלא - UK + BER length + Local Set
+	// Build final packet
 	klvPacket := []byte{}
 	klvPacket = append(klvPacket, universalKey...)
 	klvPacket = append(klvPacket, lengthBytes...)
 	klvPacket = append(klvPacket, localSet...)
 
 	return klvPacket
-}
-
-
-func SendKLV(conn net.Conn, klvPacket []byte, pos *int, muxedKlv []byte, pid uint8, serviceID int) error {
-	for *pos < len(klvPacket) {
-		ok := mux.BuildMetadataPes(klvPacket[*pos:], len(klvPacket), muxedKlv, pid, serviceID, pos, nil)
-		fmt.Printf("📦 muxedKlv first 4 bytes: % X\n", muxedKlv[:4])
-		pid := int(muxedKlv[1]&0x1F)<<8 | int(muxedKlv[2])
-		fmt.Printf("🎯 muxedKlv PID: 0x%X (%d)\n", pid, pid)
-
-		if ok == 1 {
-			_, err := conn.Write(muxedKlv)
-			if err != nil {
-				return fmt.Errorf("failed to send KLV packet: %w", err)
-			}
-			fmt.Println("📤 Sent KLV TS packet at pos", *pos)
-		} else {
-			// Not enough data to produce a full TS packet yet
-			break
-		}
-	}
-
-	if *pos >= len(klvPacket) {
-		fmt.Println("✅ Finished sending full KLV payload.")
-	}
-
-	return nil
 }
