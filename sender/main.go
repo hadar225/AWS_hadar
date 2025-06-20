@@ -47,6 +47,14 @@ func main() {
 	}
 	defer tsFile.Close()
 
+	fileInfo, err := tsFile.Stat()
+	if err != nil {
+		fmt.Println("Failed to get file info:", err)
+		return
+	}
+	totalSize := fileInfo.Size()
+	var currentOffset int64
+
 	packetBuf := make([]byte, 188)
 
 	mux.EnableDescriptors()
@@ -78,15 +86,11 @@ func main() {
 
 	for {
 		n, err := io.ReadFull(tsFile, packetBuf)
-		if err == io.EOF {
-			fmt.Println("End of TS file reached. Stopping.")
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			fmt.Println("📁 End of TS file reached. Stopping.")
 			break
 		} else if err != nil {
-			fmt.Println("Error reading TS file:", err)
-			break
-		}
-		if n != 188 {
-			fmt.Println("Incomplete TS packet read")
+			fmt.Println("❌ Error reading TS file:", err)
 			break
 		}
 
@@ -98,6 +102,11 @@ func main() {
 		}
 
 		tsPacketCount++
+		currentOffset += int64(n)
+
+		fmt.Printf("🎥 Sent TS video packet #%d (%d/%d bytes)\n",
+			tsPacketCount, currentOffset, totalSize)
+
 		if tsPacketCount%3 == 0 && pos < len(klvPacket) {
 			fmt.Println("🔁 Current KLV pos:", pos)
 			err := SendKLV(conn, klvPacket, &pos, muxedKlv, 0xFD, 1)
@@ -133,7 +142,7 @@ func SendKLV(conn net.Conn, klvPacket []byte, pos *int, muxedKlv []byte, pid uin
 		if err != nil {
 			return fmt.Errorf("failed to send TS packet: %w", err)
 		}
-		fmt.Printf("📤 Sent TS packet %d\n", i)
+		fmt.Printf("📤 Sent KLV TS packet # %d, current pos is %d/%d\n", i, *pos, len(klvPacket))
 		time.Sleep(5 * time.Millisecond)
 	}
 
@@ -172,13 +181,6 @@ func BuildDynamicKLV() []byte {
 	localSet = append(localSet, encodeField(0x02, EncodeUint64Value(endTime))...)                        // End Time
 	localSet = append(localSet, encodeField(0x0C, []byte(strconv.FormatFloat(duration, 'f', 2, 64)))...) // Duration ASCII
 	localSet = append(localSet, encodeField(0x0A, []byte(serialNumber))...)                              // Serial Number
-
-	// נוסיף הרבה שדות מזויפים לחזרתיות וגדול
-	for i := 0; i < 2; i++ {
-		tag := byte(0x50 + i%10) // tags מסתובבים בין 0x50 ל-0x59
-		val := []byte(fmt.Sprintf("FieldValue-%02d-%s", i, serialNumber))
-		localSet = append(localSet, encodeField(tag, val)...)
-	}
 
 	// Encode BER Length של כל ה־localSet
 	lengthBytes := EncodeBERLength(len(localSet))
